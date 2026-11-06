@@ -2,8 +2,8 @@
 
 **Effective date:** 6 November 2026  
 **App:** GPS Speed Tracker  
-**Developer:** [Enter the developer name or business name shown on your Google Play listing]  
-**Privacy contact:** [Enter a monitored support email address]
+**Developer:** Vimukthi Jayasekara
+**Privacy contact:** vimukthi.jy@gmail.com
 
 This Privacy Policy explains how GPS Speed Tracker (the “App”) accesses and handles information when you use it. Please replace the developer name and contact placeholders above before publishing this policy. The statements below assume the App uses GPS only to calculate speed on the device and does not include advertising, analytics, crash-reporting SDKs, account services, or a developer-operated backend. Update this policy if your app includes any of those features or handles data differently.
 
