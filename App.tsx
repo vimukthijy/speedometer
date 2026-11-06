@@ -10,22 +10,20 @@ import {
   ScrollView,
 } from 'react-native';
 
-import { SpeedUnit, formatSpeed } from './src/utils/speedUtils';
+// Components
+import SpeedDisplay from './src/components/SpeedDisplay';
+import StatCard from './src/components/StatCard';
 
+// Hook
 import { useSpeedTracking } from './src/hooks/useSpeedTracking';
 
-const COLORS = {
-  background: '#0B1110',
-  card: '#151F1C',
-  cardLight: '#1C2924',
-  green: '#45D483',
-  text: '#FFFFFF',
-  secondary: '#91A39A',
-  border: '#293832',
-  red: '#FF6464',
-};
+// Theme
+import { COLORS, SPACING, RADIUS } from './src/constants/theme';
 
-const App = () => {
+// Utilities
+import { SpeedUnit } from './src/utils/speedUtils';
+
+const App: React.FC = () => {
   const [unit, setUnit] = useState<SpeedUnit>('kmh');
 
   const {
@@ -40,21 +38,7 @@ const App = () => {
     resetTracking,
   } = useSpeedTracking();
 
-  const unitLabel = unit === 'kmh' ? 'km/h' : 'mph';
-
-  const renderStat = (label: string, value: number, icon: string) => (
-    <View style={styles.statCard}>
-      <Text style={styles.statIcon}>{icon}</Text>
-
-      <Text style={styles.statLabel}>{label}</Text>
-
-      <View style={styles.statValueContainer}>
-        <Text style={styles.statValue}>{formatSpeed(value, unit)}</Text>
-
-        <Text style={styles.statUnit}>{unitLabel}</Text>
-      </View>
-    </View>
-  );
+  const isGpsAvailable = accuracy !== null && accuracy <= 35;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -64,7 +48,7 @@ const App = () => {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
+        {/* HEADER */}
 
         <View style={styles.header}>
           <View>
@@ -75,22 +59,8 @@ const App = () => {
             <Text style={styles.subtitle}>Your GPS speedometer</Text>
           </View>
 
-          <View
-            style={[
-              styles.statusBadge,
-              {
-                backgroundColor: isTracking ? '#183C2B' : COLORS.card,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.statusDot,
-                {
-                  backgroundColor: isTracking ? COLORS.green : COLORS.secondary,
-                },
-              ]}
-            />
+          <View style={[styles.statusBadge, isTracking && styles.activeBadge]}>
+            <View style={[styles.statusDot, isTracking && styles.activeDot]} />
 
             <Text style={styles.statusText}>
               {isTracking ? 'ACTIVE' : 'STOPPED'}
@@ -98,66 +68,29 @@ const App = () => {
           </View>
         </View>
 
-        {/* Speedometer */}
+        {/* CURRENT SPEED */}
 
-        <View style={styles.speedCard}>
-          <Text style={styles.speedHeading}>CURRENT SPEED</Text>
+        <SpeedDisplay speed={currentSpeed} unit={unit} onUnitChange={setUnit} />
 
-          <View style={styles.speedValueContainer}>
-            <Text style={styles.speedValue}>
-              {formatSpeed(currentSpeed, unit)}
-            </Text>
-          </View>
-
-          <Text style={styles.speedUnit}>{unit}</Text>
-
-          {/* Unit selector */}
-
-          <View style={styles.unitSelector}>
-            <TouchableOpacity
-              style={[styles.unitButton, unit === 'kmh' && styles.selectedUnit]}
-              onPress={() => setUnit('kmh')}
-            >
-              <Text
-                style={[
-                  styles.unitButtonText,
-                  unit === 'kmh' && styles.selectedUnitText,
-                ]}
-              >
-                KM/H
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.unitButton, unit === 'mph' && styles.selectedUnit]}
-              onPress={() => setUnit('mph')}
-            >
-              <Text
-                style={[
-                  styles.unitButtonText,
-                  unit === 'mph' && styles.selectedUnitText,
-                ]}
-              >
-                MPH
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Statistics */}
+        {/* SESSION STATISTICS */}
 
         <Text style={styles.sectionTitle}>SESSION STATISTICS</Text>
 
         <View style={styles.statsGrid}>
-          {renderStat('MAX SPEED', maxSpeed, '↗')}
+          <StatCard title="MAX SPEED" value={maxSpeed} unit={unit} icon="↗" />
 
-          {renderStat('AVERAGE SPEED', averageSpeed, '∿')}
+          <StatCard
+            title="AVERAGE SPEED"
+            value={averageSpeed}
+            unit={unit}
+            icon="∿"
+          />
         </View>
 
-        {/* GPS accuracy */}
+        {/* GPS ACCURACY */}
 
         <View style={styles.gpsCard}>
-          <View>
+          <View style={styles.gpsInfo}>
             <Text style={styles.gpsTitle}>GPS ACCURACY</Text>
 
             <Text style={styles.gpsDescription}>
@@ -172,33 +105,35 @@ const App = () => {
               style={[
                 styles.gpsDot,
                 {
-                  backgroundColor:
-                    accuracy !== null && accuracy <= 35
-                      ? COLORS.green
-                      : '#E5B454',
+                  backgroundColor: isGpsAvailable
+                    ? COLORS.primary
+                    : COLORS.warning,
                 },
               ]}
             />
 
             <Text style={styles.gpsIndicatorText}>
-              {accuracy !== null && accuracy <= 35 ? 'GOOD' : 'SEARCHING'}
+              {isGpsAvailable
+                ? 'GOOD'
+                : accuracy !== null
+                ? 'WEAK'
+                : 'SEARCHING'}
             </Text>
           </View>
         </View>
 
-        {/* Error message */}
+        {/* ERROR MESSAGE */}
 
-        {error !== null && <Text style={styles.errorText}>{error}</Text>}
+        {error !== null && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
-        {/* Controls */}
+        {/* START / STOP BUTTON */}
 
         <TouchableOpacity
-          style={[
-            styles.mainButton,
-            {
-              backgroundColor: isTracking ? COLORS.red : COLORS.green,
-            },
-          ]}
+          style={[styles.mainButton, isTracking && styles.stopButton]}
           onPress={isTracking ? stopTracking : startTracking}
           activeOpacity={0.8}
         >
@@ -207,28 +142,38 @@ const App = () => {
           </Text>
         </TouchableOpacity>
 
+        {/* RESET BUTTON */}
+
         <TouchableOpacity
-          style={styles.resetButton}
+          style={[styles.resetButton, isTracking && styles.resetButtonDisabled]}
           onPress={resetTracking}
           disabled={isTracking}
+          activeOpacity={0.75}
         >
-          <Text
-            style={[
-              styles.resetButtonText,
-              {
-                opacity: isTracking ? 0.4 : 1,
-              },
-            ]}
-          >
-            RESET SESSION
-          </Text>
+          <View style={styles.resetIconWrapper}>
+            <Text style={styles.resetIcon}>↻</Text>
+          </View>
+
+          <View style={styles.resetButtonContent}>
+            <Text style={styles.resetButtonText}>RESET SESSION</Text>
+
+            <Text style={styles.resetButtonHint}>
+              {isTracking
+                ? 'Stop tracking before resetting'
+                : 'Clear current session statistics'}
+            </Text>
+          </View>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>SPEED TRACKER • POWERED BY GPS</Text>
+        {/* FOOTER */}
+
+        {/* <Text style={styles.footer}>SPEED TRACKER • POWERED BY GPS</Text> */}
       </ScrollView>
     </SafeAreaView>
   );
 };
+
+// STYLES
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -238,16 +183,18 @@ const styles = StyleSheet.create({
 
   container: {
     flexGrow: 1,
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 30,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.xxl,
   },
+
+  // Header
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 30,
+    marginBottom: SPACING.xxl,
   },
 
   appTitle: {
@@ -258,7 +205,7 @@ const styles = StyleSheet.create({
   },
 
   greenText: {
-    color: COLORS.green,
+    color: COLORS.primary,
   },
 
   subtitle: {
@@ -267,19 +214,31 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  // Tracking status
+
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderRadius: 20,
+    backgroundColor: COLORS.card,
     gap: 7,
+  },
+
+  activeBadge: {
+    backgroundColor: COLORS.primaryDark,
   },
 
   statusDot: {
     width: 7,
     height: 7,
     borderRadius: 5,
+    backgroundColor: COLORS.secondary,
+  },
+
+  activeDot: {
+    backgroundColor: COLORS.primary,
   },
 
   statusText: {
@@ -288,135 +247,36 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  speedCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 25,
-    paddingVertical: 35,
-    paddingHorizontal: 15,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  speedHeading: {
-    color: COLORS.secondary,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-
-  speedValueContainer: {
-    marginTop: 20,
-  },
-
-  speedValue: {
-    color: COLORS.text,
-    fontSize: 86,
-    fontWeight: '900',
-    letterSpacing: -4,
-    fontVariant: ['tabular-nums'],
-  },
-
-  speedUnit: {
-    color: COLORS.green,
-    fontSize: 19,
-    fontWeight: '800',
-    marginTop: -5,
-  },
-
-  unitSelector: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.background,
-    padding: 5,
-    borderRadius: 12,
-    marginTop: 30,
-    gap: 5,
-  },
-
-  unitButton: {
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 9,
-  },
-
-  selectedUnit: {
-    backgroundColor: COLORS.green,
-  },
-
-  unitButtonText: {
-    color: COLORS.secondary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  selectedUnitText: {
-    color: COLORS.background,
-  },
+  // Statistics
 
   sectionTitle: {
     color: COLORS.secondary,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.5,
-    marginTop: 30,
-    marginBottom: 14,
+    marginTop: SPACING.xxl,
+    marginBottom: SPACING.md,
   },
 
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
   },
 
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  statIcon: {
-    color: COLORS.green,
-    fontSize: 21,
-    marginBottom: 14,
-  },
-
-  statLabel: {
-    color: COLORS.secondary,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-
-  statValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    flexWrap: 'wrap',
-    marginTop: 9,
-    gap: 4,
-  },
-
-  statValue: {
-    color: COLORS.text,
-    fontSize: 25,
-    fontWeight: '900',
-    fontVariant: ['tabular-nums'],
-  },
-
-  statUnit: {
-    color: COLORS.green,
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  // GPS accuracy
 
   gpsCard: {
     backgroundColor: COLORS.cardLight,
-    borderRadius: 16,
-    padding: 18,
-    marginTop: 18,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    marginTop: SPACING.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+
+  gpsInfo: {
+    flex: 1,
   },
 
   gpsTitle: {
@@ -449,18 +309,33 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
+  // Error
+
+  errorContainer: {
+    backgroundColor: '#351D20',
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.md,
+  },
+
   errorText: {
     color: COLORS.red,
     fontSize: 12,
-    marginTop: 14,
     textAlign: 'center',
   },
+
+  // Main button
 
   mainButton: {
     marginTop: 28,
     paddingVertical: 19,
-    borderRadius: 15,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
+    backgroundColor: COLORS.primary,
+  },
+
+  stopButton: {
+    backgroundColor: COLORS.red,
   },
 
   mainButtonText: {
@@ -470,25 +345,69 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  resetButton: {
-    alignItems: 'center',
-    paddingVertical: 18,
-  },
-
-  resetButtonText: {
-    color: COLORS.secondary,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
+  // Footer
 
   footer: {
-    color: '#53645B',
+    color: COLORS.muted,
     fontSize: 9,
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 10,
     letterSpacing: 1.5,
+  },
+
+  // Reset button
+
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.md,
+
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+  },
+
+  resetButtonDisabled: {
+    opacity: 0.4,
+  },
+
+  resetIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  resetIcon: {
+    color: COLORS.primary,
+    fontSize: 26,
+    fontWeight: '700',
+  },
+
+  resetButtonContent: {
+    alignItems: 'flex-start',
+  },
+
+  resetButtonText: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+
+  resetButtonHint: {
+    color: COLORS.secondary,
+    fontSize: 10,
+    marginTop: 4,
   },
 });
 

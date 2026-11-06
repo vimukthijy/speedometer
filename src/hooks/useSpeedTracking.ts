@@ -1,32 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 import { PermissionsAndroid, Platform } from 'react-native';
-
 import Geolocation from 'react-native-geolocation-service';
 
 interface LocationSample {
   latitude: number;
   longitude: number;
   timestamp: number;
+  accuracy: number;
 }
 
-const toRadians = (value: number) => (value * Math.PI) / 180;
+const MAX_GPS_ACCURACY = 25;
+
+// Use a rolling GPS window to reduce stationary GPS drift.
+const GPS_WINDOW_MS = 5000;
+const MIN_WINDOW_MS = 3000;
+
+// Movement detection threshold, in metres.
+const MIN_MOVEMENT_DISTANCE = 6;
+const MAX_MOVEMENT_DISTANCE_THRESHOLD = 15;
+
+// Speed filtering.
+const SPEED_SMOOTHING = 0.4;
+const MIN_DETECTABLE_SPEED = 0.8; // m/s
+
+const GPS_TIMEOUT_MS = 3000;
+const MAX_INTEGRATION_GAP_MS = 3000;
 
 const calculateDistance = (
-  first: LocationSample,
-  second: LocationSample,
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
 ): number => {
   const earthRadius = 6371000;
 
-  const latitudeDifference = toRadians(second.latitude - first.latitude);
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
-  const longitudeDifference = toRadians(second.longitude - first.longitude);
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
 
   const a =
-    Math.sin(latitudeDifference / 2) ** 2 +
-    Math.cos(toRadians(first.latitude)) *
-      Math.cos(toRadians(second.latitude)) *
-      Math.sin(longitudeDifference / 2) ** 2;
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) ** 2;
 
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
@@ -34,6 +51,7 @@ const calculateDistance = (
 export const useSpeedTracking = () => {
   const [isTracking, setIsTracking] = useState(false);
 
+  // All speed values are stored in metres per second.
   const [currentSpeed, setCurrentSpeed] = useState(0);
   const [maxSpeed, setMaxSpeed] = useState(0);
   const [averageSpeed, setAverageSpeed] = useState(0);
@@ -43,14 +61,39 @@ export const useSpeedTracking = () => {
   const [error, setError] = useState<string | null>(null);
 
   const watchId = useRef<number | null>(null);
-  const lastLocation = useRef<LocationSample | null>(null);
+  const startingRef = useRef(false);
 
+  // GPS sample history.
+  const samplesRef = useRef<LocationSample[]>([]);
+
+  // Tracking and speed calculation.
+  const smoothedSpeedRef = useRef(0);
+  const movingConfirmationsRef = useRef(0);
+  const isMovingRef = useRef(false);
+
+  // Average speed and distance.
   const distanceRef = useRef(0);
-  const startTime = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+
+  const lastGpsUpdateRef = useRef<number | null>(null);
+  const lastProcessedTimestampRef = useRef<number | null>(null);
+  const lastIntegratedSpeedRef = useRef(0);
+
+  const resetFilters = useCallback(() => {
+    samplesRef.current = [];
+
+    smoothedSpeedRef.current = 0;
+    movingConfirmationsRef.current = 0;
+    isMovingRef.current = false;
+
+    lastGpsUpdateRef.current = null;
+    lastProcessedTimestampRef.current = null;
+    lastIntegratedSpeedRef.current = 0;
+  }, []);
 
   const requestPermission = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') {
-      return false;
+      return true;
     }
 
     const result = await PermissionsAndroid.request(
@@ -73,11 +116,30 @@ export const useSpeedTracking = () => {
       watchId.current = null;
     }
 
-    setIsTracking(false);
-    setCurrentSpeed(0);
-  }, []);
+    const startedAt = startTimeRef.current;
 
-  const startTracking = async () => {
+    if (startedAt !== null) {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+
+      setElapsedSeconds(elapsed);
+      setAverageSpeed(elapsed > 0 ? distanceRef.current / elapsed : 0);
+    }
+
+    startTimeRef.current = null;
+
+    resetFilters();
+
+    setCurrentSpeed(0);
+    setIsTracking(false);
+  }, [resetFilters]);
+
+  const startTracking = useCallback(async () => {
+    if (startingRef.current || watchId.current !== null) {
+      return;
+    }
+
+    startingRef.current = true;
+
     try {
       setError(null);
 
@@ -88,14 +150,12 @@ export const useSpeedTracking = () => {
         return;
       }
 
-      if (watchId.current !== null) {
-        Geolocation.clearWatch(watchId.current);
-        watchId.current = null;
-      }
+      // Reset previous session.
+      resetFilters();
 
-      lastLocation.current = null;
       distanceRef.current = 0;
-      startTime.current = Date.now();
+      startTimeRef.current = Date.now();
+      lastGpsUpdateRef.current = Date.now();
 
       setCurrentSpeed(0);
       setMaxSpeed(0);
@@ -107,67 +167,182 @@ export const useSpeedTracking = () => {
 
       watchId.current = Geolocation.watchPosition(
         position => {
-          const {
-            latitude,
-            longitude,
-            speed,
-            accuracy: gpsAccuracy,
-          } = position.coords;
-
-          const timestamp = position.timestamp;
-
-          setAccuracy(gpsAccuracy ?? null);
-
-          // Ignore readings with poor GPS accuracy.
-          if (gpsAccuracy == null || gpsAccuracy > 35) {
+          if (startTimeRef.current === null) {
             return;
           }
 
-          const currentLocation: LocationSample = {
+          lastGpsUpdateRef.current = Date.now();
+
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          const gpsAccuracy = position.coords.accuracy;
+
+          setAccuracy(Number.isFinite(gpsAccuracy) ? gpsAccuracy : null);
+
+          const timestamp =
+            Number.isFinite(position.timestamp) && position.timestamp > 0
+              ? position.timestamp
+              : Date.now();
+
+          // Ignore invalid GPS coordinates or inaccurate readings.
+          const validPosition =
+            Number.isFinite(latitude) &&
+            Number.isFinite(longitude) &&
+            Number.isFinite(gpsAccuracy) &&
+            gpsAccuracy > 0 &&
+            gpsAccuracy <= MAX_GPS_ACCURACY;
+
+          if (!validPosition) {
+            samplesRef.current = [];
+            smoothedSpeedRef.current = 0;
+            movingConfirmationsRef.current = 0;
+            isMovingRef.current = false;
+            lastProcessedTimestampRef.current = timestamp;
+            lastIntegratedSpeedRef.current = 0;
+
+            setCurrentSpeed(0);
+            return;
+          }
+
+          // Ignore duplicate or older location samples.
+          if (
+            lastProcessedTimestampRef.current !== null &&
+            timestamp <= lastProcessedTimestampRef.current
+          ) {
+            return;
+          }
+
+          const sample: LocationSample = {
             latitude,
             longitude,
             timestamp,
+            accuracy: gpsAccuracy,
           };
 
-          let calculatedSpeed = 0;
+          samplesRef.current.push(sample);
 
-          if (lastLocation.current) {
-            const distance = calculateDistance(
-              lastLocation.current,
-              currentLocation,
-            );
+          // Keep only the latest 5 seconds of GPS readings.
+          samplesRef.current = samplesRef.current.filter(
+            item => timestamp - item.timestamp <= GPS_WINDOW_MS,
+          );
 
-            const timeDifference =
-              (timestamp - lastLocation.current.timestamp) / 1000;
+          const samples = samplesRef.current;
+          const firstSample = samples[0];
 
-            if (timeDifference > 0 && timeDifference < 10) {
-              const distanceSpeed = distance / timeDifference;
+          if (!firstSample) {
+            setCurrentSpeed(0);
+            lastProcessedTimestampRef.current = timestamp;
+            return;
+          }
 
-              // Reject implausible GPS jumps.
-              if (distanceSpeed <= 70) {
-                if (distance >= 2) {
-                  distanceRef.current += distance;
-                }
+          const timeDifference = timestamp - firstSample.timestamp;
 
-                calculatedSpeed =
-                  speed != null && speed >= 0 ? speed : distanceSpeed;
-              }
+          // Wait for enough GPS readings before estimating speed.
+          if (samples.length < 3 || timeDifference < MIN_WINDOW_MS) {
+            setCurrentSpeed(0);
+            lastProcessedTimestampRef.current = timestamp;
+            lastIntegratedSpeedRef.current = 0;
+            return;
+          }
+
+          // Calculate actual movement between GPS positions.
+          const distance = calculateDistance(
+            firstSample.latitude,
+            firstSample.longitude,
+            latitude,
+            longitude,
+          );
+
+          const timeInSeconds = timeDifference / 1000;
+
+          // Require meaningful movement beyond normal GPS drift.
+          const averageAccuracy = (firstSample.accuracy + gpsAccuracy) / 2;
+
+          const movementThreshold = Math.max(
+            MIN_MOVEMENT_DISTANCE,
+            Math.min(MAX_MOVEMENT_DISTANCE_THRESHOLD, averageAccuracy * 0.8),
+          );
+
+          // Stationary detection.
+          if (distance <= movementThreshold) {
+            isMovingRef.current = false;
+            movingConfirmationsRef.current = 0;
+            smoothedSpeedRef.current = 0;
+
+            setCurrentSpeed(0);
+
+            lastProcessedTimestampRef.current = timestamp;
+            lastIntegratedSpeedRef.current = 0;
+
+            return;
+          }
+
+          // Calculate speed from GPS position displacement.
+          const calculatedSpeed = distance / timeInSeconds;
+
+          if (calculatedSpeed < MIN_DETECTABLE_SPEED) {
+            isMovingRef.current = false;
+            movingConfirmationsRef.current = 0;
+            smoothedSpeedRef.current = 0;
+
+            setCurrentSpeed(0);
+
+            lastProcessedTimestampRef.current = timestamp;
+            lastIntegratedSpeedRef.current = 0;
+
+            return;
+          }
+
+          // Require two consecutive movement estimates.
+          movingConfirmationsRef.current += 1;
+
+          if (movingConfirmationsRef.current < 2) {
+            lastProcessedTimestampRef.current = timestamp;
+            lastIntegratedSpeedRef.current = 0;
+
+            setCurrentSpeed(0);
+            return;
+          }
+
+          isMovingRef.current = true;
+
+          // Smooth the calculated speed.
+          const filteredSpeed =
+            smoothedSpeedRef.current === 0
+              ? calculatedSpeed
+              : smoothedSpeedRef.current * (1 - SPEED_SMOOTHING) +
+                calculatedSpeed * SPEED_SMOOTHING;
+
+          smoothedSpeedRef.current = filteredSpeed;
+
+          // Estimate travelled distance for session statistics.
+          const previousTimestamp = lastProcessedTimestampRef.current;
+
+          if (previousTimestamp !== null) {
+            const deltaMilliseconds = timestamp - previousTimestamp;
+
+            if (
+              deltaMilliseconds > 0 &&
+              deltaMilliseconds <= MAX_INTEGRATION_GAP_MS
+            ) {
+              const deltaSeconds = deltaMilliseconds / 1000;
+
+              const segmentSpeed =
+                (lastIntegratedSpeedRef.current + filteredSpeed) / 2;
+
+              distanceRef.current += segmentSpeed * deltaSeconds;
             }
           }
 
-          lastLocation.current = currentLocation;
+          lastProcessedTimestampRef.current = timestamp;
+          lastIntegratedSpeedRef.current = filteredSpeed;
 
-          // Ignore tiny GPS speed fluctuations.
-          if (calculatedSpeed < 0.5) {
-            calculatedSpeed = 0;
-          }
+          setCurrentSpeed(filteredSpeed);
 
-          setCurrentSpeed(calculatedSpeed);
-
-          setMaxSpeed(previous => Math.max(previous, calculatedSpeed));
+          setMaxSpeed(previous => Math.max(previous, filteredSpeed));
         },
         gpsError => {
-          setError(gpsError.message);
+          setError(gpsError.message || 'GPS location error.');
           stopTracking();
         },
         {
@@ -175,48 +350,72 @@ export const useSpeedTracking = () => {
           distanceFilter: 0,
           interval: 1000,
           fastestInterval: 1000,
-          timeout: 15000,
-          maximumAge: 1000,
+          timeout: 20000,
+          maximumAge: 0,
           showLocationDialog: true,
           forceRequestLocation: true,
         },
       );
     } catch (exception) {
-      setError('Unable to start GPS tracking.');
-      stopTracking();
-    }
-  };
+      const message =
+        exception instanceof Error ? exception.message : String(exception);
 
+      setError(`Unable to start GPS tracking. ${message}`);
+      stopTracking();
+    } finally {
+      startingRef.current = false;
+    }
+  }, [resetFilters, stopTracking]);
+
+  // Keep elapsed time and average speed updated.
   useEffect(() => {
     if (!isTracking) {
       return;
     }
 
     const timer = setInterval(() => {
-      if (startTime.current === null) {
+      const startedAt = startTimeRef.current;
+
+      if (startedAt === null) {
         return;
       }
 
-      const elapsed = Math.floor((Date.now() - startTime.current) / 1000);
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
 
       setElapsedSeconds(elapsed);
 
       if (elapsed > 0) {
         setAverageSpeed(distanceRef.current / elapsed);
       }
+
+      // Reset displayed speed if GPS updates stop arriving.
+      const lastUpdate = lastGpsUpdateRef.current;
+
+      if (lastUpdate !== null && Date.now() - lastUpdate > GPS_TIMEOUT_MS) {
+        samplesRef.current = [];
+        smoothedSpeedRef.current = 0;
+        movingConfirmationsRef.current = 0;
+        isMovingRef.current = false;
+
+        lastProcessedTimestampRef.current = null;
+        lastIntegratedSpeedRef.current = 0;
+
+        setCurrentSpeed(0);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
   }, [isTracking]);
 
-  const resetTracking = () => {
-    if (isTracking) {
+  const resetTracking = useCallback(() => {
+    if (watchId.current !== null || startingRef.current) {
       return;
     }
 
-    lastLocation.current = null;
+    resetFilters();
+
     distanceRef.current = 0;
-    startTime.current = null;
+    startTimeRef.current = null;
 
     setCurrentSpeed(0);
     setMaxSpeed(0);
@@ -224,12 +423,15 @@ export const useSpeedTracking = () => {
     setAccuracy(null);
     setElapsedSeconds(0);
     setError(null);
-  };
+    setIsTracking(false);
+  }, [resetFilters]);
 
+  // Remove GPS watcher when the component unmounts.
   useEffect(() => {
     return () => {
       if (watchId.current !== null) {
         Geolocation.clearWatch(watchId.current);
+        watchId.current = null;
       }
     };
   }, []);
