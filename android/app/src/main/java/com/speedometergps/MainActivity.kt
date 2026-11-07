@@ -1,4 +1,4 @@
-package com.speedometer
+package com.speedometergps
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

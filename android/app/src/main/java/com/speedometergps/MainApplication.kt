@@ -1,4 +1,4 @@
-package com.speedometer
+package com.speedometergps
 
 import android.app.Application
 import com.facebook.react.PackageList
