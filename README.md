@@ -1,0 +1,180 @@
+# GPS Speed Tracker
+
+A GPS-powered speedometer app built with **React Native** and **TypeScript**. GPS Speed Tracker lets you monitor your current speed, maximum speed, and average speed during a tracking session, with support for **kilometres per hour (km/h)** and **miles per hour (mph)**.
+
+The app is designed with a clean dark interface and a simple session workflow: start tracking, monitor your speed and GPS accuracy, stop the session, or reset the session statistics.
+
+> **Platform:** Android (React Native CLI project)
+
+## Features
+
+- **Live speedometer** — view your GPS-estimated speed while tracking.
+- **Two speed units** — switch between km/h and mph.
+- **Session statistics** — view the maximum and average speed for the current session.
+- **GPS accuracy indicator** — see the reported location accuracy and signal status.
+- **Session controls** — start, stop, and reset a tracking session.
+- **Dark interface** — a charcoal theme with green accents.
+
+## Screenshots
+
+Add screenshots of the app here. For example:
+
+```text
+screenshots/
+├── home-screen.png
+└── tracking-screen.png
+```
+
+When screenshots are added to the repository, you can display them here using Markdown:
+
+```md
+![GPS Speed Tracker home screen](screenshots/home-screen.png)
+```
+
+## Technology Stack
+
+- [React Native](https://reactnative.dev/) — cross-platform mobile framework
+- [TypeScript](https://www.typescriptlang.org/) — application code
+- [react-native-geolocation-service](https://github.com/Agontuk/react-native-geolocation-service) — device location updates
+- Android native location permissions — access to GPS location while tracking
+
+## Getting Started
+
+### Prerequisites
+
+Before running the project, install and configure:
+
+- Node.js (use a version supported by your React Native project)
+- npm (or the package manager used by the project)
+- Java Development Kit (JDK) compatible with your React Native/Android Gradle setup
+- Android Studio and the Android SDK
+- An Android device or emulator
+
+For the most up-to-date environment requirements, follow the [React Native environment setup guide](https://reactnative.dev/docs/set-up-your-environment).
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/YOUR-USERNAME/gps-speed-tracker.git
+cd gps-speed-tracker
+```
+
+Replace `YOUR-USERNAME` with the GitHub account that hosts the repository.
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+If the geolocation package is not already listed in `package.json`, install it with:
+
+```bash
+npm install react-native-geolocation-service
+```
+
+### 3. Configure Android location permissions
+
+The Android app needs location permission to receive GPS updates. Check that the following permissions are declared in `android/app/src/main/AndroidManifest.xml`, above the `<application>` element:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+```
+
+The app requests fine location permission at runtime. Users must grant location access for GPS speed tracking to work. The app should explain why this permission is needed before requesting it.
+
+### 4. Run the app
+
+Connect an Android device with USB debugging enabled, or start an Android emulator. Then run:
+
+```bash
+npx react-native run-android
+```
+
+For more reliable GPS testing, use a physical device outdoors with a clear view of the sky. Emulator location readings may need to be supplied through the emulator's location controls.
+
+## Building a Release App Bundle (AAB)
+
+Google Play requires a release-signed Android App Bundle for a production release.
+
+1. Generate and securely back up an upload keystore.
+2. Configure the release signing settings in `android/app/build.gradle`.
+3. Store keystore passwords and signing properties outside source control, such as in your user-level `~/.gradle/gradle.properties` file.
+4. Ensure the release build uses `signingConfigs.release` rather than the debug signing configuration.
+5. From the project root, run:
+
+```bash
+cd android
+./gradlew clean
+./gradlew bundleRelease
+```
+
+The generated bundle is normally located at:
+
+```text
+android/app/build/outputs/bundle/release/app-release.aab
+```
+
+**Security:** Never commit your keystore, signing passwords, API credentials, or other secrets to the repository. Back up the upload keystore securely; losing it can complicate future app updates.
+
+## How Speed Tracking Works
+
+The app receives location updates from the device while a tracking session is active. It uses GPS position changes and filtering to estimate movement speed, then presents the result in the selected unit.
+
+GPS performance depends on the device, satellite visibility, weather, nearby buildings, and other environmental conditions. Readings can fluctuate or take time to stabilize. For best results, test outdoors and allow the device to obtain a reliable GPS fix.
+
+The displayed GPS speed is an estimate and should not be treated as a certified measurement instrument.
+
+## Permissions and Privacy
+
+GPS Speed Tracker requests location permission because location information is required to estimate speed and provide GPS accuracy information.
+
+- Location access is used for the app's GPS tracking feature.
+- Tracking is controlled by the user through the app's Start and Stop controls.
+- Do not add claims about data collection, sharing, retention, or third-party services here unless they match the exact version being distributed.
+
+**Privacy policy:** Add the publicly accessible privacy policy URL used in your Google Play listing here:
+
+`[YOUR-PUBLISHED-PRIVACY-POLICY-URL]`
+
+Make sure the privacy policy accurately describes the app's actual behavior and any third-party SDKs included in the release. The policy should also be accessible from within the app if required by the applicable Google Play policy.
+
+## Project Structure
+
+The source code is organized by responsibility. The main application and supporting modules include:
+
+```text
+.
+├── android/
+├── src/
+│   ├── components/
+│   │   ├── SpeedDisplay.tsx
+│   │   └── StatCard.tsx
+│   ├── constants/
+│   │   └── theme.ts
+│   ├── hooks/
+│   │   └── useSpeedTracking.ts
+│   └── utils/
+│       └── speedUtils.ts
+├── App.tsx
+├── package.json
+└── README.md
+```
+
+Your repository may contain additional React Native configuration and platform files that are not shown above.
+
+## Contributing
+
+Contributions, bug reports, and suggestions are welcome. To propose a change:
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Make and test your changes.
+4. Open a pull request describing the change.
+
+For bug reports, include the Android version, device model, steps to reproduce the issue, and relevant error messages. Avoid including personal location information or other private data in screenshots and logs.
+
+## License
+
+No license has been specified yet. Unless a license is added to this repository, the source code is not automatically granted for reuse, redistribution, or modification. Add a `LICENSE` file if you intend to publish the project under an open-source license.
