@@ -17,19 +17,8 @@ The app is designed with a clean dark interface and a simple session workflow: s
 
 ## Screenshots
 
-Add screenshots of the app here. For example:
-
-```text
-screenshots/
-├── home-screen.png
-└── tracking-screen.png
-```
-
-When screenshots are added to the repository, you can display them here using Markdown:
-
-```md
-![GPS Speed Tracker home screen](screenshots/home-screen.png)
-```
+<img width="270" height="600" alt="Screenshot_1793965889" src="https://github.com/user-attachments/assets/817abe4a-8638-4fb6-8bb5-f7dec709641e" />
+<img width="270" height="600" alt="Screenshot_1793965964" src="https://github.com/user-attachments/assets/a1660f82-ccb8-40f2-a9f9-cfee91f46131" />
 
 ## Technology Stack
 
@@ -96,27 +85,13 @@ For more reliable GPS testing, use a physical device outdoors with a clear view 
 
 ## Building a Release App Bundle (AAB)
 
-Google Play requires a release-signed Android App Bundle for a production release.
-
-1. Generate and securely back up an upload keystore.
-2. Configure the release signing settings in `android/app/build.gradle`.
-3. Store keystore passwords and signing properties outside source control, such as in your user-level `~/.gradle/gradle.properties` file.
-4. Ensure the release build uses `signingConfigs.release` rather than the debug signing configuration.
-5. From the project root, run:
+From the project root, run:
 
 ```bash
 cd android
 ./gradlew clean
 ./gradlew bundleRelease
 ```
-
-The generated bundle is normally located at:
-
-```text
-android/app/build/outputs/bundle/release/app-release.aab
-```
-
-**Security:** Never commit your keystore, signing passwords, API credentials, or other secrets to the repository. Back up the upload keystore securely; losing it can complicate future app updates.
 
 ## How Speed Tracking Works
 
@@ -132,13 +107,6 @@ GPS Speed Tracker requests location permission because location information is r
 
 - Location access is used for the app's GPS tracking feature.
 - Tracking is controlled by the user through the app's Start and Stop controls.
-- Do not add claims about data collection, sharing, retention, or third-party services here unless they match the exact version being distributed.
-
-**Privacy policy:** Add the publicly accessible privacy policy URL used in your Google Play listing here:
-
-`[YOUR-PUBLISHED-PRIVACY-POLICY-URL]`
-
-Make sure the privacy policy accurately describes the app's actual behavior and any third-party SDKs included in the release. The policy should also be accessible from within the app if required by the applicable Google Play policy.
 
 ## Project Structure
 
